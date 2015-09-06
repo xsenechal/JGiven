@@ -10,7 +10,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,16 +54,53 @@ public class ReflectionUtil {
      */
     public static void forEachMethod( final Object object, Class<?> clazz, final Class<? extends Annotation> annotation,
             final MethodAction action ) {
+        final Set<Method> alreadyCalled = new TreeSet<Method>( new MethodComparator() );
+
         forEachSuperClass( clazz, new ClassAction() {
             @Override
             public void act( Class<?> clazz ) throws Exception {
                 for( Method method : clazz.getDeclaredMethods() ) {
                     if( method.isAnnotationPresent( annotation ) ) {
-                        action.act( object, method );
+                        if( !alreadyCalled.contains( method ) ) {
+                            alreadyCalled.add( method );
+                            action.act( object, method );
+                        }
                     }
                 }
             }
         } );
+
+    }
+
+    /**
+     * Comparator to detect overridden methods. This is not 100% correct,
+     * because it might be that parameter types are contravariant, which
+     * is ignored here.
+     */
+    private static class MethodComparator implements Comparator<Method> {
+
+        @Override
+        public int compare( Method o1, Method o2 ) {
+            int result = o1.getName().compareTo( o2.getName() );
+            if( result != 0 ) {
+                return result;
+            }
+            Class<?>[] params1 = o1.getParameterTypes();
+            Class<?>[] params2 = o2.getParameterTypes();
+
+            if( params1.length != params2.length ) {
+                return Integer.compare( params1.length, params2.length );
+            }
+
+            for( int i = 0; i < params1.length; i++ ) {
+                if( !params1[i].equals( params2 ) ) {
+                    return params1[i].getName().compareTo( params2[i].getName() );
+                }
+            }
+
+            return 0;
+        }
+
     }
 
     /**
